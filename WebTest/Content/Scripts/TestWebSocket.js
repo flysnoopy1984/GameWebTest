@@ -3,6 +3,9 @@ var ws2 = null;
 var openId = "";
 var MySeatNo = -1;
 var pl = null;
+var turnCoins = 0;
+var _gi = null;
+var _gc = null;
 
 var processClock = null;
 $(function () {
@@ -26,14 +29,17 @@ $(function () {
                 switch (ac) {
                     //进入游戏
                     case 0:
-                        var GameInfo = jsonObj.GameInfo;
+                        _gi = jsonObj.GameInfo;
+                        _gc = jsonObj.GameCoins;
 
-                        SetGameInfo(GameInfo);
+                        SetGameInfo(_gi);
 
-                        var gameStatus = GameInfo.GameStatus;
+                        var gameStatus = _gi.GameStatus;
                         $("#Notice").text(GetStatusName(gameStatus));
 
                         pl = jsonObj.PlayerList;
+
+
                         var myOpenId = $("#OpenId").val();
                         $.each(pl, function (i) {
 
@@ -63,7 +69,7 @@ $(function () {
                         coins = jsonObj.RemainCoins;
                         var myOpenId = $("#OpenId").val();
 
-                        AddSeat(SeatNo, coins, myOpenId).text();
+                        AddSeat(SeatNo, coins, myOpenId);
                         break;
                     case 1:
                         $("#Notice").text(GetStatusName(1));
@@ -76,22 +82,50 @@ $(function () {
                         $("#Notice").text(GetStatusName(3));
                         break;
                     case 4:
+                        _gi = jsonObj.GameInfo;
+                        _gc = jsonObj.GameCoins;    
+                        SetGameInfo(_gi);
 
-                        var gi = jsonObj.GameInfo;
-                        SetGameInfo(gi);
+                        var betUserId = _gi.CurBetUserOpenId;
+                        var bigUserId = _gi.BigBetUserOpenId;
+                        var smallUserId = _gi.SmallBetUserOpenId;
+                        var dotUserId = _gi.DotUserOpenId;
 
-                        var betUserId = jsonObj.GameInfo.CurBetUserOpenId;
-                        //    var myOpenId = $("#OpenId").val();
+                        var bigObj = $("#sun_" + bigUserId);
+                        bigObj.text(bigUserId + "(大)");
+
+                        var smallObj = $("#sun_" + smallUserId);
+                        smallObj.text(smallUserId + "(小)");
+
+                        var dotObj = $("#sun_" + dotUserId);
+                        smallObj.text("(o)"+dotObj.text());
+
+                        var waitP = $("#sun_" + betUserId).parent();
+                        var seatNo = $(waitP).attr("Id");
 
                         $(".SeatArea").children().each(function () {
-                            var seatOpenId = $(this).find("#seatUserId").text();
-                            if (seatOpenId == betUserId) {
-                                var seatNo = $(this).attr("Id");
-                                StartWaitUser(seatNo);
-                                return false;
-                            }
+                            var userId = $(this).attr("userId");
+                            var coinStr = GetBetCoinsStr(userId);
+                            if(coinStr!="")
+                            $(this).find(".BetCoins").text(coinStr);
 
                         });
+                        
+
+                      
+
+                       // var betCoinsId = "bc" + SeatNo;
+
+                        StartWaitUser(seatNo);
+
+                        //$(".SeatArea").children().each(function () {
+                        //    var seatOpenId = $(this).find("#seatUserId").text();
+                        //    if (seatOpenId == betUserId) {
+                        //        var seatNo = $(this).attr("Id");
+                        //        StartWaitUser(seatNo);
+                        //        return false;
+                        //    }
+                        //});
 
 
                         $("#Notice").text(GetStatusName(4));
@@ -141,16 +175,55 @@ function AddTableCard(CardObj) {
     $(".TableArea").append('<div class="CardDiv">' + card + '</div>');
 }
 
+function GetBetCoinsStr(userId) {
+
+ //   var myOpenId = $("#OpenId").val();
+    var coinStr = "";
+    if (_gc != null) {
+        if (_gc.PlayerCoinsDetail != null)
+        {
+            bcs = _gc.PlayerCoinsDetail[userId];
+            if (bcs != undefined && bcs.length > 0) {
+                $.each(bcs, function (i) {
+                    var bc = bcs[i];
+                    if (bc.PileNo == _gi.GameTurn) {
+                        if (coinStr != "")
+                            coinStr += "_";
+                        coinStr += bc.Coins;
+                    }
+                })
+
+            }
+        }
+        
+    }
+    return coinStr;
+}
+
 function AddSeat(SeatNo, RemainCoins, userId) {
+
     var Id = "sn" + SeatNo;
     var consId = "coin" + SeatNo;
+  //  var betCoinsId = "bc" + SeatNo;
     var myOpenId = $("#OpenId").val();
+
+    var bcs;
+    var coinStr = GetBetCoinsStr(userId);
 
     if (userId == myOpenId) {
         MySeatNo = SeatNo;
     }
-    var html = ' <div class="SeatDiv" id="' + Id + '">';
-    html += "<div id='seatUserId'>" + userId + "</div>";
+    var userName = userId;
+    if (_gi.SmallBetUserOpenId == userId)
+        userName = userId + "(小)";
+    if (_gi.BigBetUserOpenId == userId)
+        userName = userId + "(大)";
+
+    if (_gi.DotUserOpenId == userId)
+        userName = "(o)" + userName;
+
+    var html = ' <div class="SeatDiv" userId="'+userId+'" id="' + Id + '">';
+    html += "<div id='sun_" + userId + "'>" + userName + "</div>";
     html += '<div class="progress" style="width:120px;">';
     html += '<div class="progress-bar" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" pn=0>';
     //html += '<span class="sr-only"></span>';
@@ -158,7 +231,10 @@ function AddSeat(SeatNo, RemainCoins, userId) {
     html += '<div id="SeatNo">No ' + SeatNo + '</div>';
 
     html += ' <img src="/Content/Images/seat.png" />';
-    html += '<div id="' + consId + '" class="CoinDiv">' + RemainCoins + '</div>';
+    html += '<div id="' + consId + '" class="CoinDiv">'
+    html += "<div>" + RemainCoins + "</div>";
+    html += "<div class='BetCoins'>" + coinStr + "</div>";
+    html+='</div>';
     html += '</div>';
 
     var SeatArea = $(".SeatArea");
@@ -177,7 +253,7 @@ function SetGameInfo(gi) {
         $("#giBig").text("大盲注：" + gi.BigBetUserOpenId);
         $("#giDot").text("Dot：" + gi.DotUserOpenId);
 
-        $("#giReqCoins").text("需押注：" + gi.CurRequreCoins);
+        $("#giReqCoins").text("需押注：" + gi.CurRequireCoins);
     }
 }
 function StartWaitUser(seatId) {
@@ -293,17 +369,10 @@ function StartStuffleGame() {
     var openId = $("#OpenId").val();
 
     $(".SeatArea").find(".progress-bar").each(function () {
-
         var obj = $(this);
         obj.attr("pn", 0);
         obj.css("width", "0%");
-
-
-
-
     });
-
-
 
     var json = 'TestStartGame {"OpenId":"' + openId + '",\
                                     "RoomCode":"04240608",\
