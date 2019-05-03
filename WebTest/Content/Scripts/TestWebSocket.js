@@ -3,7 +3,8 @@ var ws2 = null;
 var openId = "";
 var MySeatNo = -1;
 var pl = null;
-var turnCoins = 0;
+var turnReqCoins = 0;
+var turnAddedCoins = 0;
 var _gi = null;
 var _gc = null;
 
@@ -64,6 +65,7 @@ $(function () {
                         });
 
                         break;
+                        //用户座下
                     case 101:
                         SeatNo = jsonObj.SeatNo;
                         coins = jsonObj.RemainCoins;
@@ -71,6 +73,7 @@ $(function () {
 
                         AddSeat(SeatNo, coins, myOpenId);
                         break;
+                        //等待用户加入开始游戏
                     case 1:
                         $("#Notice").text(GetStatusName(1));
 
@@ -81,6 +84,7 @@ $(function () {
                     case 3:
                         $("#Notice").text(GetStatusName(3));
                         break;
+                        //洗牌结束
                     case 4:
                         _gi = jsonObj.GameInfo;
                         _gc = jsonObj.GameCoins;    
@@ -110,26 +114,103 @@ $(function () {
                             $(this).find(".BetCoins").text(coinStr);
 
                         });
+                        //当前Coin
+                        var myOpenId = $("#OpenId").val();
+                        if (myOpenId == smallUserId)
+                        {
+                            turnReqCoins = jsonObj.SmallBetAmount;
+                            turnAddedCoins = jsonObj.SmallBetAmount;
+                        } 
+                        else if (myOpenId == bigUserId)
+                        {
+                            turnReqCoins = 0;
+                            turnAddedCoins = jsonObj.BigBetAmount;
+                        }
+                        else
+                        {
+                            turnReqCoins = jsonObj.BigBetAmount;
+                            turnAddedCoins = 0;
+                        }
                         
-
-                      
-
-                       // var betCoinsId = "bc" + SeatNo;
-
+                     
                         StartWaitUser(seatNo);
-
-                        //$(".SeatArea").children().each(function () {
-                        //    var seatOpenId = $(this).find("#seatUserId").text();
-                        //    if (seatOpenId == betUserId) {
-                        //        var seatNo = $(this).attr("Id");
-                        //        StartWaitUser(seatNo);
-                        //        return false;
-                        //    }
-                        //});
 
 
                         $("#Notice").text(GetStatusName(4));
                         break;
+                        //弃牌
+                    case 20:
+                        var myOpenId = $("#OpenId").val();
+                        var GiveUpUserOpenId = jsonObj.GiveUpUserOpenId;
+                        var NextUserOpenId = jsonObj.NextUserOpenId;
+                        var seatId = "";
+                        if (GiveUpUserOpenId != myOpenId) {
+                            seatId = GetSeatIdByOpenId(GiveUpUserOpenId);
+                            CleanProcess(seatId);
+                        }
+                        if (NextUserOpenId != "") {
+                            seatId = GetSeatIdByOpenId(NextUserOpenId);
+                            StartWaitUser(seatId);
+                        }
+
+                        break;
+
+                        //跟牌
+                    case 21:
+                        var myOpenId = $("#OpenId").val();
+                        var FollowCoinsUserOpenId = jsonObj.FollowCoinsUserOpenId;
+                        var NextUserOpenId = jsonObj.NextUserOpenId;
+                        var FollowCoins = jsonObj.FollowCoins;
+
+                        var seatId = "";
+                        if (FollowCoinsUserOpenId != myOpenId)
+                        {
+                            seatId = GetSeatIdByOpenId(FollowCoinsUserOpenId);
+                            UserCoinsUpdate(seatId, FollowCoins);
+                            CleanProcess(seatId);
+                        }
+                        if (NextUserOpenId != "") {
+                            seatId = GetSeatIdByOpenId(NextUserOpenId);
+                            StartWaitUser(seatId);
+                        }
+                        break;
+
+                        //Pass
+                    case 22:
+                        var myOpenId = $("#OpenId").val();
+                        var PassUserOpenId = jsonObj.PassUserOpenId;
+                        var NextUserOpenId = jsonObj.NextUserOpenId;
+                        var seatId = "";
+                        if (PassUserOpenId != myOpenId) {
+                            seatId = GetSeatIdByOpenId(PassUserOpenId);
+                            CleanProcess(seatId);
+                        }
+                        if (NextUserOpenId != "")
+                        {
+                            seatId = GetSeatIdByOpenId(NextUserOpenId);
+                            StartWaitUser(seatId);
+                        }
+                      
+                        break;
+
+                        //Add Coin
+                    case 23:
+                        var myOpenId = $("#OpenId").val();
+                        var AddCoinsUserOpenId = jsonObj.AddCoinsUserOpenId;
+                        var NextUserOpenId = jsonObj.NextUserOpenId;
+                        var Coins = jsonObj.AddCoins;
+                        var seatId = "";
+                        if (AddCoinsUserOpenId != myOpenId) {
+                            seatId = GetSeatIdByOpenId(AddCoinsUserOpenId);
+                            UserCoinsUpdate(seatId, Coins);
+                            CleanProcess(seatId);
+                        }
+                     
+                        seatId = GetSeatIdByOpenId(NextUserOpenId);
+                        StartWaitUser(seatId);
+
+                        break;
+                        //结算开始清算。
                     case 50:
                         $("#Notice").text(GetStatusName(50));
                 }
@@ -144,6 +225,12 @@ $(function () {
 
     // TestInit();
 });
+
+function GetSeatIdByOpenId(openId) {
+    var waitP = $("#sun_" + PassUserOpenId).parent();
+    var seatNo = $(waitP).attr("Id");
+    return seatNo;
+}
 
 function TestInit() {
     var html = '<div class="progress">';
@@ -232,7 +319,7 @@ function AddSeat(SeatNo, RemainCoins, userId) {
 
     html += ' <img src="/Content/Images/seat.png" />';
     html += '<div id="' + consId + '" class="CoinDiv">'
-    html += "<div>" + RemainCoins + "</div>";
+    html += "<div class='RemCoins'>" + RemainCoins + "</div>";
     html += "<div class='BetCoins'>" + coinStr + "</div>";
     html+='</div>';
     html += '</div>';
@@ -274,7 +361,15 @@ function WaitingUser(seatId) {
         clearInterval(processClock)
 }
 
+function CleanProcess(seatId) {
 
+    var processBar = $("#" + seatId).find(".progress-bar");
+    if (processClock != null && processClock != undefined)
+        clearInterval(processClock);
+
+    processBar.attr("pn", 0);
+    processBar.css("width", "0%");
+}
 
 function GetStatusName(status) {
     switch (status) {
@@ -294,7 +389,6 @@ function GetStatusName(status) {
 
     }
 }
-
 
 function UserSitDown(n) {
 
@@ -339,7 +433,19 @@ function UserExit(n) {
 }
 
 function Pass() {
+
+    if (turnReqCoins > 0) {
+        alert("Required Coins Needed!");
+        return;
+    }
+
+    var seatId = "sn" + MySeatNo;
+    CleanProcess(seatId);
+
     var openId = $("#OpenId").val();
+    var json = 'Pass {"OpenId":"' + openId + '"}';
+    ws1.send(json);
+   
 
 }
 
@@ -348,21 +454,81 @@ function AllIn() {
 }
 
 function Follow() {
+    if (turnReqCoins == 0)
+    {
+        alert("No Coins Need Follow!");
+        return;
+    }
+
+    var seatId = "sn" + MySeatNo;
+
+    UserCoinsUpdate(seatId, turnReqCoins);
+
+    CleanProcess(seatId);
+
+    var openId = $("#OpenId").val();
+    var json = 'Follow {"OpenId":"' + openId + '","FollowCoins":"' + turnReqCoins + '"}';
+    ws1.send(json);
+}
+
+function GiveUp() {
+    var seatId = "sn" + MySeatNo;
+    CleanProcess(seatId);
+
+    var openId = $("#OpenId").val();
+    var json = 'GiveUp {"OpenId":"' + openId + '"}';
+    ws1.send(json);
+}
+function UserCoinsUpdate(seatId,updatedCoins)
+{
+    var remObj = $("#" + seatId).find(".RemCoins");
+    var betObj = $("#" + seatId).find(".BetCoins");
+
+    var remCoins = parseInt(remObj.text());
+    remCoins += updatedCoins;
+    if (remCoins <= 0) {
+        alert("资金不足！");
+        return false;
+    }
+
+    remObj.text(remCoins);
+
+    var betStr = betObj.text();
+    if (betStr != "")
+        betStr += "_";
+
+    betStr += Math.abs(updatedCoins);
+    return true;
 
 }
 
 function AddCoins() {
 
+    var seatId = "sn" + MySeatNo;
+    var addCoins = 10;
+    
+    UserCoinsUpdate(seatId, addCoins);
+   
+    CleanProcess(seatId);
+
+    var openId = $("#OpenId").val();
+    var json = 'AddCoin {"OpenId":"' + openId + '","Coins":"' + addCoins + '"}';
+    ws1.send(json);
+
+ 
+   
 }
 
 function Test() {
 
     var openId = $("#OpenId").val();
 
-    var json = 'BackHall {"OpenId":"' + openId + '",}';
+    var json = 'BackHall {"OpenId":"' + openId + '"}';
     ws1.send(json);
 
 }
+
+
 
 function StartStuffleGame() {
 
